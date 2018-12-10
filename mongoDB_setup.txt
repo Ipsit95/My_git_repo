@@ -1,0 +1,173 @@
+ openssl x509 -in new.cert.csr -out new.cert.cert -req -signkey new.cert.key -days 365
+
+##Make the required chnages in mongodb.conf file##
+net:
+  port: 27017
+  bindIp: 127.0.0.1
+  ssl:
+     ssl: true
+     mode: requireSSL
+     PEMKeyFile: /root/certs/mongodb.pem
+
+##Adding authentication to mongodb##
+Access the mongodb cli
+use admin
+
+##Adding user for single db authentication##
+
+db.createUser(
+  {
+    user: "Username",
+    pwd: "password",
+    roles: [ { role: "userAdminAnyDatabase", db: "admin" } ]
+  }
+)
+
+##Adding user for all db authentication##
+
+db.createUser(
+  {
+    user: "ram",
+    pwd: "abc123",
+    roles: [ { role: "readWriteAnyDatabase", db: "admin" } ]
+  }
+)
+
+db.createUser(
+  {
+    user: "ram",
+
+    pwd: "abc123",
+    roles: [ { role: "readWrite", db: "persist" } ]
+  }
+)
+
+
+db.createUser(
+  {
+    user: "roy",
+    pwd: "abc123",
+    roles: [ { role: "root", db: "admin" } ]
+  }
+)
+
+db.auth( <username>, <password> )
+
+######Change user password########
+
+use products
+db.changeUserPassword("accountUser", "SOh3TbYhx8ypJPxmt1oOfL")
+
+db.myCollection.insert([{'name': 'Alice', 'age': 30},{'name': 'Bill', 'age': 25},{'name': 'Bob', 'age': 35}]);
+
+##start the mongodb service##
+
+mongod --config "config file locations"
+
+##Access the db service with##
+
+mongo --ssl --username rohit --password  --host "test-mongo.com" --sslAllowInvalidCertificates --sslCAFile rohit.crt(rohit.cer) --authenticationDatabase "admin"
+
+##mongodb replication set with 2 server##
+
+#Generate a Key file
+#Issue this command to generate your key file:
+
+openssl rand -base64 756 > mongo-keyfile
+
+##change the permission for the file##
+
+chmod 400 /opt/mongo/mongo-keyfile
+
+##Chnge the config file for mongodb##
+
+net:
+  port: 27017
+  bindIp: 127.0.0.1,192.0.2.1
+
+security:
+  keyFile: /opt/mongo/mongo-keyfile
+
+replication:
+  replSetName: rs0
+
+##From the mongo shell, initiate the replica set:##
+
+rs.initiate()
+
+##While still connected to the mongo shell, add the other hosts to the replica set:##
+
+rs.add("hostnam:port/ipaddress:port")
+
+##Once all members have been added, check the configuration of your replica set:##
+
+rs.conf()
+
+##If you need to do so in the future, you can also check the status of your replica set:##
+
+rs.status()
+
+
+Test ReplicationPermalink
+At this stage, your replica set is fully functional and ready to use. The step+s in this section are optional, but if you’d like a visual confirmation that your replication is working, you can follow along.
+
+Connect to the mongo as the administrative user, on the primary member of your replica set. This is usually the Linode from which you initiated the set, but if you’re not sure, you can check the output of rs.status() from any of the members.
+
+Enter test data:
+
+use exampleDB
+for (var i = 0; i <= 10; i++) db.exampleCollection.insert( { x : i } )
+The first command creates a database called exampleDB, and the second command generates 20 simple documents, which are then inserted into a collection called exampleCollection.
+
+If your replica set is configured properly, the data should be present on your secondary members as well as the primary. To test this, connect to the mongo shell with the administrative user on one of your secondary members, and run:
+
+db.getMongo().setSlaveOk()
+This command enables secondary member read operations on a per-connection basis, so be sure to disconnect before you deploy your replica set into production. By default, read queries are not allowed on secondary members to avoid problems with your application retrieving stale data. This can become an issue when your database is undergoing more complex queries at a higher load, but because of the relatively simple test data we wrote, this is not an issue here.
+
+https://www.linode.com/docs/databases/mongodb/create-a-mongodb-replica-set/
+
+However, changing the overall read preference can have benefits in some cases. For more information, see the official MongoDB documentation.
+
+Before running the command in the previous step, any read operations, including simple ones like show dbs and show collections would fail with an error. Now that you’ve enabled reading, switch to the exampleDB database:
+
+use exampleDB
+Next, run a find() method with no arguments to show all documents in exampleCollection:
+
+db.exampleCollection.find()
+If replication is working, you’ll see a list of the sample documents we created on the primary host.
+
+Disconnect from the mongo shell on your secondary member:
+
+quit()
+If you reconnect on the secondary host in the future, you’ll be unable to perform read operations unless you enable it using the command in Step 3.
+
+#########TO CHECKK THE AVAILABLE DATABASE################
+show dbs
+
+#########TO CHECK THE CREATED COLLECTIONS (TABLES) IN DATABASE##########
+show collections
+
+#########TO FIND VIEW THE DATA IN THE COLLECTIONS#########
+db.File.find().pretty()
+
+db = Current database you are working on.
+File = The collection (table) you have created in database.
+find = find is the find() method to search the data with specified addressing of data.
+pretty = This is the method to view the data in readable format or we can say getting the output in correct json format.
+
+#############TO CHECK THE DATA WITH SPECFIC STRING OR ADDRESSING IN THE COLLECTIONS#############
+db.File.find({caseId: "123456"}).pretty()
+
+#############TO CHECK THE DATA WITH SPECIFIC STRING OR ADDRESSING WITH SPECFIC STRING OR NUMBER IN COLLECTIONS EXCLUDING THE HIGHLIGTS DATA########
+db.File.find({caseId: "123456"}, {highlights:0}).pretty()
+
+db.File.find({"edmsUploadResponse.responseCode": "00"}, {highlights:0}).pretty()
+
+############TO IDENTIFY WHEN THE DATA IS UPDATED/INSERTED/CREATED ON BASIS OF OBJECT id ##################
+ObjectId("5bsd54fs5d4f51vsb8851vs5").getTimestamp()
+
+############TO VIEW THE DATA ON BASIS OF DECENDING OBJECT ID ##############
+db.File.find().sort({_id: -1})
+
+############TO VIEW THE DATA ON BASIS OF ASCENDING OBJECT ID ##############
+db.File.find().sort({_id: 1})
