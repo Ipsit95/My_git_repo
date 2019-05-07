@@ -1,0 +1,86 @@
+apt-get install -y git build-essential libpcre3 libpcre3-dev libssl-dev libtool autoconf apache2-dev libxml2-dev libcurl4-openssl-dev automake pkgconf
+cd /usr/src
+git clone -b nginx_refactoring https://github.com/SpiderLabs/ModSecurity.git
+cd ModSecurity
+./autogen.sh
+./configure --enable-standalone-module --disable-mlogc
+make
+tar -zxvf nginx-1.14.0.tar.gz && rm -f nginx-1.10.3.tar.gz
+./configure --user=www-data --group=www-data --add-module=/usr/src/ModSecurity/nginx/modsecurity --with-http_ssl_module
+make
+make install
+sed -i "s/#user  nobody;/user www-data www-data;/" /usr/local/nginx/conf/nginx.conf
+/usr/local/nginx/sbin/nginx -t
+
+cat <<EOF>> /lib/systemd/system/nginx.service
+[Service]
+Type=forking
+ExecStartPre=/usr/local/nginx/sbin/nginx -t -c /usr/local/nginx/conf/nginx.conf
+ExecStart=/usr/local/nginx/sbin/nginx -c /usr/local/nginx/conf/nginx.conf
+ExecReload=/usr/local/nginx/sbin/nginx -s reload
+KillStop=/usr/local/nginx/sbin/nginx -s stop
+
+KillMode=process
+Restart=on-failure
+RestartSec=42s
+
+PrivateTmp=true
+LimitNOFILE=200000
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl start nginx.service
+systemctl stop nginx.service
+systemctl restart nginx.service
+
+vi /usr/local/nginx/conf/nginx.conf
+
+Find the following segment within the http {} segment:
+
+location / {
+    root   html;
+    index  index.html index.htm;
+}
+
+Find the following segment within the http {} segment:
+
+location / {
+    ModSecurityEnabled on;
+    ModSecurityConfig modsec_includes.conf;
+    #proxy_pass http://localhost:8011;
+    #proxy_read_timeout 180s;
+    root   html;
+    index  index.html index.htm;
+}
+
+Create a file named /usr/local/nginx/conf/modsec_includes.conf:
+
+cat <<EOF>> /usr/local/nginx/conf/modsec_includes.conf
+include modsecurity.conf
+include owasp-modsecurity-crs/crs-setup.conf
+include owasp-modsecurity-crs/rules/*.conf
+EOF
+
+Import ModSecurity configuration files
+
+cp /usr/src/ModSecurity/modsecurity.conf-recommended /usr/local/nginx/conf/modsecurity.conf
+cp /usr/src/ModSecurity/unicode.mapping /usr/local/nginx/conf/
+
+Modify the /usr/local/nginx/conf/modsecurity.conf file:
+
+sed -i "s/SecRuleEngine DetectionOnly/SecRuleEngine On/" /usr/local/nginx/conf/modsecurity.conf
+
+Add OWASP ModSecurity CRS (Core Rule Set) files:
+
+cd /usr/local/nginx/conf
+git clone https://github.com/SpiderLabs/owasp-modsecurity-crs.git
+cd owasp-modsecurity-crs
+mv crs-setup.conf.example crs-setup.conf
+cd rules
+mv REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf.example REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf
+mv RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf.example RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf
+
+systemctl start nginx.service
+
